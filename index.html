@@ -1435,7 +1435,7 @@ function addAdvice(btn, text) {
     ta.value = current ? current + ' ' + text : text;
     btn.classList.add('active');
   }
-  ta.focus();
+  btn.blur();
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
@@ -1491,9 +1491,16 @@ async function generatePDF() {
     setText('Print_3', v('printRMA'));
     setText('Unit', v('unitNum'));
 
-    // Text14 = advice / explanation
-    setText('Text14.0', v('adviceGiven'));
-    setText('Text14.1', v('patientExplanation'));
+    // Text14 = advice / explanation — use font size 0 (auto) to match form's original sizing
+    const setTextAutoSize = (name, val) => {
+      try {
+        const field = form.getTextField(name);
+        field.setText(val || '');
+        field.setFontSize(0);
+      } catch(e) {}
+    };
+    setTextAutoSize('Text14.0', v('adviceGiven'));
+    setTextAutoSize('Text14.1', v('patientExplanation'));
 
     // ── Sex checkboxes (Check Box15 = M, Check Box16 = F) ──
     const sex = document.querySelector('input[name="sex"]:checked')?.value;

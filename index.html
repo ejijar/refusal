@@ -663,17 +663,17 @@
       <div class="field-row cols-1">
         <div class="field">
           <label>Patient Name</label>
-          <input type="text" id="patientName" placeholder="Last, First Middle">
+          <input type="text" id="patientName" placeholder="First Last" oninput="onPatientNameChange()">
         </div>
       </div>
       <div class="field-row cols-phone-dob">
         <div class="field">
           <label>Phone</label>
-          <input type="tel" id="phone" placeholder="(203) 555-0000">
+          <input type="tel" id="phone" placeholder="(203) 555-0000" inputmode="numeric" oninput="formatPhone(this)">
         </div>
         <div class="field">
           <label>Date of Birth (MM/DD/YYYY)</label>
-          <input type="text" id="dob" placeholder="MM/DD/YYYY" maxlength="10" oninput="formatDOB(this); calcAge()">
+          <input type="text" id="dob" placeholder="MMDDYYYY" inputmode="numeric" maxlength="10" oninput="formatDOBDigits(this); calcAge()">
         </div>
         <div class="field">
           <label>Age</label>
@@ -763,14 +763,14 @@
           <div class="sub-section-body">
             <div class="radio-group vertical">
               <label class="radio-row">
-                <input type="radio" name="disposition" id="disp0" value="0">
-                <div class="radio-dot"></div>
-                <span class="radio-label">Refused all EMS services</span>
-              </label>
-              <label class="radio-row">
                 <input type="radio" name="disposition" id="disp1" value="1">
                 <div class="radio-dot"></div>
                 <span class="radio-label">Refused transport but accepted field treatment</span>
+              </label>
+              <label class="radio-row">
+                <input type="radio" name="disposition" id="disp0" value="0">
+                <div class="radio-dot"></div>
+                <span class="radio-label">Refused all EMS services</span>
               </label>
             </div>
           </div>
@@ -781,11 +781,11 @@
 
   <!-- MEDICAL DIRECTION (collapsible) -->
   <div class="section" id="medDirSection">
-    <div class="section-header" onclick="toggleSection(this)">
+    <div class="section-header collapsed" onclick="toggleSection(this)">
       <h2>Medical Direction</h2>
       <span class="chevron">▼</span>
     </div>
-    <div class="section-body">
+    <div class="section-body hidden">
       <div class="field-row cols-1" style="margin-bottom:14px">
         <div class="field">
           <label>MD Name</label>
@@ -852,27 +852,27 @@
         <label style="display:block; margin-bottom:8px">Relationship</label>
         <div class="radio-group">
           <label class="radio-row">
-            <input type="radio" name="relationship" id="rel0" value="0">
+            <input type="radio" name="relationship" id="rel0" value="0" onchange="onRelationshipChange(this)">
             <div class="radio-dot"></div>
             <span class="radio-label">Self</span>
           </label>
           <label class="radio-row">
-            <input type="radio" name="relationship" id="rel1" value="1">
+            <input type="radio" name="relationship" id="rel1" onchange="onRelationshipChange(this)" value="1">
             <div class="radio-dot"></div>
             <span class="radio-label">Relative</span>
           </label>
           <label class="radio-row">
-            <input type="radio" name="relationship" id="rel2" value="2">
+            <input type="radio" name="relationship" id="rel2" onchange="onRelationshipChange(this)" value="2">
             <div class="radio-dot"></div>
             <span class="radio-label">Friend</span>
           </label>
           <label class="radio-row">
-            <input type="radio" name="relationship" id="rel3" value="3">
+            <input type="radio" name="relationship" id="rel3" onchange="onRelationshipChange(this)" value="3">
             <div class="radio-dot"></div>
             <span class="radio-label">Law Enforcement</span>
           </label>
           <label class="radio-row">
-            <input type="radio" name="relationship" id="rel4" value="4">
+            <input type="radio" name="relationship" id="rel4" onchange="onRelationshipChange(this)" value="4">
             <div class="radio-dot"></div>
             <span class="radio-label">Other</span>
           </label>
@@ -903,11 +903,11 @@
 
   <!-- PATIENT ADVICE (legal text) -->
   <div class="section">
-    <div class="section-header" onclick="toggleSection(this)">
+    <div class="section-header collapsed" onclick="toggleSection(this)">
       <h2>Patient Advice (Legal Language)</h2>
       <span class="chevron">▼</span>
     </div>
-    <div class="section-body">
+    <div class="section-body hidden">
       <div class="advice-text">
         This form is being completed because I have refused medical care and/or treatment as noted above. I understand that ambulance personnel are not physicians and are not qualified or authorized to make a diagnosis of my condition, and that their care is not a substitute for that of a physician. I recognize that I may have a serious injury or illness, which could get worse without medical attention even though I may feel fine at this time. I understand that I may change my mind and call 911 if I decide to accept treatment or need assistance later. I also understand that I may seek treatment from a physician or at an emergency department 24 hours a day. I acknowledge that the ambulance crew has explained this advice to me and that I have read this form completely and understand its provisions. I agree to release, indemnify, and hold harmless the ambulance service and its officers, members, or other agents from any and all claims, actions, cause of action, damages, or legal liabilities of any kind arising out of my condition or the refusal of medical care and/or transport, or of any act or omission of the ambulance service or its crew, even for negligence.
       </div>
@@ -927,7 +927,7 @@
         <label style="display:block; margin-bottom:8px">Signed By</label>
         <div class="sig-check-row">
           <label class="check-row">
-            <input type="checkbox" id="signerPatient" checked>
+            <input type="checkbox" id="signerPatient" checked onchange="onSignerPatientChange()">
             <div class="check-box"></div>
             <span class="check-label">Patient</span>
           </label>
@@ -1047,13 +1047,35 @@ function toggleSameAsHome() {
   }
 }
 
-// ── DOB formatter ─────────────────────────────────────────────────────────
-function formatDOB(el) {
+// ── Phone formatter ───────────────────────────────────────────────────────
+function formatPhone(el) {
+  const raw = el.value.replace(/\D/g, '');
+  if (raw.length === 0) { el.value = ''; return; }
+  // US format for exactly 10 digits; beyond 10 = international, show raw digits
+  if (raw.length <= 10) {
+    if (raw.length <= 3) el.value = raw.length === 3 ? '(' + raw : raw;
+    else if (raw.length <= 6) el.value = '(' + raw.slice(0,3) + ') ' + raw.slice(3);
+    else el.value = '(' + raw.slice(0,3) + ') ' + raw.slice(3,6) + '-' + raw.slice(6);
+  } else {
+    // International: just show the raw digits unformatted
+    el.value = raw;
+  }
+}
+
+// ── DOB formatter (digits only → MM/DD/YYYY) ─────────────────────────────
+function formatDOBDigits(el) {
+  // Strip everything non-digit
   let v = el.value.replace(/\D/g, '');
-  if (v.length > 8) v = v.slice(0,8);
+  if (v.length > 8) v = v.slice(0, 8);
+  // Insert slashes as they type
   if (v.length >= 5) v = v.slice(0,2) + '/' + v.slice(2,4) + '/' + v.slice(4);
   else if (v.length >= 3) v = v.slice(0,2) + '/' + v.slice(2);
   el.value = v;
+}
+
+// ── Legacy formatDOB (used by date signature fields) ─────────────────────
+function formatDOB(el) {
+  formatDOBDigits(el);
 }
 
 function calcAge() {
@@ -1068,6 +1090,36 @@ function calcAge() {
       if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
       document.getElementById('age').value = age >= 0 ? age : '';
     }
+  }
+}
+
+// ── Patient name change → update downstream fields ────────────────────────
+function onPatientNameChange() {
+  // If "Self" is selected in custody, keep in sync
+  const rel0 = document.getElementById('rel0');
+  if (rel0 && rel0.checked) {
+    document.getElementById('custodyName').value = document.getElementById('patientName').value;
+  }
+  // If signerPatient is checked, keep printPatient in sync
+  const signerPatient = document.getElementById('signerPatient');
+  if (signerPatient && signerPatient.checked) {
+    document.getElementById('printPatient').value = document.getElementById('patientName').value;
+  }
+}
+
+// ── Custody relationship change ───────────────────────────────────────────
+function onRelationshipChange(el) {
+  if (el.value === '0' && el.checked) {
+    // Self: autofill from patient name
+    document.getElementById('custodyName').value = document.getElementById('patientName').value;
+  }
+}
+
+// ── Signer Patient checkbox change ───────────────────────────────────────
+function onSignerPatientChange() {
+  const cb = document.getElementById('signerPatient');
+  if (cb && cb.checked) {
+    document.getElementById('printPatient').value = document.getElementById('patientName').value;
   }
 }
 

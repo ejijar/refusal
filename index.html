@@ -634,6 +634,39 @@
     .field-row.cols-phone-dob { grid-template-columns: 1fr 1fr; }
     .field-row.cols-city { grid-template-columns: 1fr; }
   }
+
+  /* ── Advice Pills ── */
+  .advice-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .advice-pill {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .advice-pill:hover {
+    background: var(--accent);
+    color: #000;
+  }
+  .advice-pill:active {
+    transform: scale(0.96);
+  }
+  .advice-pill.active {
+    background: var(--accent);
+    color: #000;
+  }
 </style>
 </head>
 <body>
@@ -669,11 +702,11 @@
       <div class="field-row cols-phone-dob">
         <div class="field">
           <label>Phone</label>
-          <input type="tel" id="phone" placeholder="(203) 555-0000" inputmode="numeric" oninput="formatPhone(this)">
+          <input type="tel" id="phone" placeholder="(XXX) XXX-XXXX" inputmode="numeric" oninput="formatPhone(this)">
         </div>
         <div class="field">
-          <label>Date of Birth (MM/DD/YYYY)</label>
-          <input type="text" id="dob" placeholder="MMDDYYYY" inputmode="numeric" maxlength="10" oninput="formatDOBDigits(this); calcAge()">
+          <label>Date of Birth</label>
+          <input type="text" id="dob" placeholder="MM/DD/YYYY" inputmode="numeric" maxlength="10" oninput="formatDOBDigits(this); calcAge()">
         </div>
         <div class="field">
           <label>Age</label>
@@ -682,7 +715,7 @@
         <div class="field">
           <label>Sex</label>
           <div class="sex-toggle">
-            <input type="radio" name="sex" id="sexM" value="M" checked>
+            <input type="radio" name="sex" id="sexM" value="M">
             <label for="sexM">M</label>
             <input type="radio" name="sex" id="sexF" value="F">
             <label for="sexF">F</label>
@@ -888,6 +921,9 @@
       <span class="chevron">▼</span>
     </div>
     <div class="section-body">
+      <div class="advice-pills">
+        <button class="advice-pill" onclick="addAdvice(this, 'Patient informed to call EMS back if necessary.')">Call Back</button>
+      </div>
       <div class="two-col-grid">
         <div class="field">
           <label>Advice Given to Patient by EMS</label>
@@ -926,24 +962,24 @@
       <div style="margin-bottom:16px">
         <label style="display:block; margin-bottom:8px">Signed By</label>
         <div class="sig-check-row">
-          <label class="check-row">
-            <input type="checkbox" id="signerPatient" checked onchange="onSignerPatientChange()">
-            <div class="check-box"></div>
-            <span class="check-label">Patient</span>
+          <label class="radio-row">
+            <input type="radio" name="signerType" id="signerPatient" value="patient" onchange="onSignerPatientChange()">
+            <div class="radio-dot"></div>
+            <span class="radio-label">Patient</span>
           </label>
-          <label class="check-row">
-            <input type="checkbox" id="signerParent">
-            <div class="check-box"></div>
-            <span class="check-label">Parent</span>
+          <label class="radio-row">
+            <input type="radio" name="signerType" id="signerParent" value="parent">
+            <div class="radio-dot"></div>
+            <span class="radio-label">Parent</span>
           </label>
-          <label class="check-row">
-            <input type="checkbox" id="signerGuardian">
-            <div class="check-box"></div>
-            <span class="check-label">Legal Guardian</span>
+          <label class="radio-row">
+            <input type="radio" name="signerType" id="signerGuardian" value="guardian">
+            <div class="radio-dot"></div>
+            <span class="radio-label">Legal Guardian</span>
           </label>
         </div>
         <label class="check-row">
-          <input type="checkbox" id="patientRefused">
+          <input type="checkbox" id="patientRefused" onchange="onPatientRefusedChange()">
           <div class="check-box"></div>
           <span class="check-label">Patient refused to sign refusal form</span>
         </label>
@@ -1093,6 +1129,20 @@ function calcAge() {
   }
 }
 
+// ── Set today's date on load ──────────────────────────────────────────────
+function getTodayFormatted() {
+  const d = new Date();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const yyyy = d.getFullYear();
+  return mm + '/' + dd + '/' + yyyy;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const today = getTodayFormatted();
+  document.getElementById('datePatient').value = today;
+  document.getElementById('dateWitness').value = today;
+});
+
 // ── Patient name change → update downstream fields ────────────────────────
 function onPatientNameChange() {
   // If "Self" is selected in custody, keep in sync
@@ -1115,10 +1165,20 @@ function onRelationshipChange(el) {
   }
 }
 
-// ── Signer Patient checkbox change ───────────────────────────────────────
+// ── Patient Refused checkbox: clears signer radio when checked ───────────
+function onPatientRefusedChange() {
+  const refused = document.getElementById('patientRefused');
+  if (refused && refused.checked) {
+    // Clear all signer type radios
+    document.querySelectorAll('input[name="signerType"]').forEach(r => r.checked = false);
+    document.getElementById('printPatient').value = '';
+  }
+}
+
+// ── Signer Patient radio change ───────────────────────────────────────────
 function onSignerPatientChange() {
-  const cb = document.getElementById('signerPatient');
-  if (cb && cb.checked) {
+  const r = document.getElementById('signerPatient');
+  if (r && r.checked) {
     document.getElementById('printPatient').value = document.getElementById('patientName').value;
   }
 }
@@ -1358,6 +1418,22 @@ document.addEventListener('DOMContentLoaded', () => {
   if (backdrop) backdrop.addEventListener('click', closeSigModal);
 });
 
+// ── Advice Pills ──────────────────────────────────────────────────────────
+function addAdvice(btn, text) {
+  const ta = document.getElementById('adviceGiven');
+  if (btn.classList.contains('active')) {
+    // Second tap: remove the text we added
+    ta.value = ta.value.replace(' ' + text, '').replace(text, '').trim();
+    btn.classList.remove('active');
+  } else {
+    // First tap: append text
+    const current = ta.value.trim();
+    ta.value = current ? current + ' ' + text : text;
+    btn.classList.add('active');
+  }
+  ta.focus();
+}
+
 // ── Toast ─────────────────────────────────────────────────────────────────
 function showToast(msg, duration=2500) {
   const t = document.getElementById('toast');
@@ -1480,9 +1556,10 @@ async function generatePDF() {
     } catch(e) {}
 
     // ── Signer type (Check Box10.0.0=Patient, .1=Parent, .2=Legal Guardian) ──
-    try { form.getCheckBox('Check Box10.0.0')[checked('signerPatient') ? 'check' : 'uncheck'](); } catch(e) {}
-    try { form.getCheckBox('Check Box10.0.1')[checked('signerParent') ? 'check' : 'uncheck'](); } catch(e) {}
-    try { form.getCheckBox('Check Box10.0.2')[checked('signerGuardian') ? 'check' : 'uncheck'](); } catch(e) {}
+    const signerVal = radioVal('signerType');
+    try { form.getCheckBox('Check Box10.0.0')[signerVal === 'patient' ? 'check' : 'uncheck'](); } catch(e) {}
+    try { form.getCheckBox('Check Box10.0.1')[signerVal === 'parent' ? 'check' : 'uncheck'](); } catch(e) {}
+    try { form.getCheckBox('Check Box10.0.2')[signerVal === 'guardian' ? 'check' : 'uncheck'](); } catch(e) {}
     // ── Patient refused to sign (Check Box10.1.0) ──
     try { form.getCheckBox('Check Box10.1.0')[checked('patientRefused') ? 'check' : 'uncheck'](); } catch(e) {}
 

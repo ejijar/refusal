@@ -1466,9 +1466,19 @@ function isCanvasEmpty(id) {
 // Close backdrop click — defer until DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   const backdrop = document.getElementById('sigModalBackdrop');
-  if (backdrop) backdrop.addEventListener('pointerup', () => {
-    if (!_sigNavActive) closeSigModal();
-  });
+  if (backdrop) {
+    // Only close if the pointerdown started ON the backdrop (not the modal)
+    let _backdropPointerDown = false;
+    backdrop.addEventListener('pointerdown', (e) => {
+      _backdropPointerDown = (e.target === backdrop);
+    });
+    backdrop.addEventListener('pointerup', (e) => {
+      if (_backdropPointerDown && e.target === backdrop && !_sigNavActive) {
+        closeSigModal();
+      }
+      _backdropPointerDown = false;
+    });
+  }
 });
 
 // ── Advice Pills ──────────────────────────────────────────────────────────
@@ -1566,40 +1576,32 @@ async function generatePDF() {
     setTextSmall('Text14.0', v('adviceGiven'));
     setTextSmall('Text14.1', v('patientExplanation'));
 
-    // Helper: set checkbox state by directly manipulating /AS and /V
-    // because pdf-lib's check() requires a known exportValue which these fields lack
+    // Helper: properly set checkbox appearance for pdf-lib flatten.
+    // pdf-lib's flatten reads AP.N as either a PDFRef (direct stream) or PDFDict (keyed by value).
+    // In this form AP.N is a PDFRef pointing to a dict — so we must replace AP.N with
+    // a direct ref to the Yes or Off stream to get the right appearance.
     const PDFName = PDFLib.PDFName;
-    const setCheckbox = (name, checked) => {
+    const PDFRef = PDFLib.PDFRef;
+    const setCheckbox = (name, isChecked) => {
       try {
         const cb = form.getCheckBox(name);
-        const val = checked ? PDFName.of('Yes') : PDFName.of('Off');
-        // Set on all widgets of this field
-        const rawField = cb.acroField;
-        rawField.set(PDFName.of('V'), val);
-        rawField.set(PDFName.of('AS'), val);
-        // Walk Kids to set AS on each widget
-        const kids = rawField.Kids();
-        if (kids) {
-          for (let i = 0; i < kids.size(); i++) {
-            const kid = pdfDoc.context.lookup(kids.get(i));
-            if (kid) kid.set(PDFName.of('AS'), val);
+        const val = isChecked ? PDFName.of('Yes') : PDFName.of('Off');
+        // Set the field value
+        cb.acroField.dict.set(PDFName.of('V'), val);
+        // Replace AP.N with a direct ref to the correct appearance stream
+        const widget = cb.acroField.getWidgets()[0];
+        if (!widget) return;
+        const apRef = widget.getNormalAppearance();
+        const apDict = pdfDoc.context.lookup(apRef);
+        if (apDict && apDict.get) {
+          const streamRef = apDict.get(val) || apDict.get(PDFName.of('Off'));
+          if (streamRef instanceof PDFRef) {
+            const AP = cb.acroField.dict.get(PDFName.of('AP'));
+            const APobj = pdfDoc.context.lookup(AP);
+            if (APobj && APobj.set) APobj.set(PDFName.of('N'), streamRef);
           }
         }
-      } catch(e) {
-        // Fallback: find the widget by T name directly in indirectObjects
-        try {
-          const tName = name;
-          pdfDoc.context.indirectObjects.forEach(obj => {
-            if (!obj?.get) return;
-            const T = obj.get(PDFName.of('T'));
-            if (T && T.decodeText && T.decodeText() === tName) {
-              const val = checked ? PDFName.of('Yes') : PDFName.of('Off');
-              obj.set(PDFName.of('V'), val);
-              obj.set(PDFName.of('AS'), val);
-            }
-          });
-        } catch(e2) {}
-      }
+      } catch(e) { /* field not found or already flattened */ }
     };
 
     // ── Sex checkboxes (Check Box15 = M, Check Box16 = F) ──
@@ -1639,7 +1641,7 @@ async function generatePDF() {
     setCheckbox('Check Box10.1.0', checked('patientRefused'));
 
     // ── Flatten form (so signatures can be drawn as images) ──
-    form.flatten();
+    form.flatten({ updateFieldAppearances: false });
 
     // ── Draw signatures as images ──
     const page = pdfDoc.getPages()[0];

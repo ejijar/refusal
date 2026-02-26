@@ -1512,29 +1512,74 @@ async function generatePDF() {
   btn.textContent = 'Generating...';
 
   try {
-    const { PDFDocument } = PDFLib;
+    const { PDFDocument, rgb } = PDFLib;
+    const PDFName = PDFLib.PDFName;
+    const PDFArray = PDFLib.PDFArray;
 
     // Load template
     const pdfBytes = Uint8Array.from(atob(PDF_B64), c => c.charCodeAt(0));
     const pdfDoc = await PDFDocument.load(pdfBytes);
+    const ctx = pdfDoc.context;
 
-    // Fix orphaned widget annotations missing /P (page reference).
+    // ── Step 1: Register all orphaned widget annotations into the AcroForm /Fields tree.
+    //    This PDF has many checkboxes + Text14.1 that live only in the page /Annots array
+    //    but are absent from AcroForm/Fields, so pdf-lib's form.getCheckBox/getTextField
+    //    cannot find them. We add them so pdf-lib can set their values normally.
     {
+      const acroForm = pdfDoc.catalog.get(PDFName.of('AcroForm'));
+      const fieldsArray = acroForm.get(PDFName.of('Fields'));
       const pageRef = pdfDoc.getPage(0).ref;
-      pdfDoc.context.indirectObjects.forEach((obj) => {
-        if (!obj || !obj.get) return;
-        const subtype = obj.get(pdfDoc.context.obj('Subtype'));
-        if (subtype && subtype.toString() === '/Widget') {
-          if (!obj.get(pdfDoc.context.obj('P'))) {
-            obj.set(pdfDoc.context.obj('P'), pageRef);
-          }
+      const pageAnnots = pdfDoc.getPage(0).node.get(PDFName.of('Annots'));
+
+      // Names already in the Fields array
+      const registeredNames = new Set();
+      const collectNames = (arr) => {
+        if (!arr) return;
+        const len = arr.size ? arr.size() : 0;
+        for (let i = 0; i < len; i++) {
+          const ref = arr.get(i);
+          const obj = ctx.lookup(ref);
+          if (!obj || !obj.get) continue;
+          const t = obj.get(PDFName.of('T'));
+          if (t) registeredNames.add(t.decodeText ? t.decodeText() : t.toString().replace(/[()]/g,''));
+          const kids = obj.get(PDFName.of('Kids'));
+          if (kids) collectNames(kids);
         }
-      });
+      };
+      collectNames(fieldsArray);
+
+      // Walk page annots and register any widget with a /T not yet in Fields
+      const annotCount = pageAnnots ? (pageAnnots.size ? pageAnnots.size() : 0) : 0;
+      for (let i = 0; i < annotCount; i++) {
+        const annotRef = pageAnnots.get(i);
+        const annot = ctx.lookup(annotRef);
+        if (!annot || !annot.get) continue;
+        const subtype = annot.get(PDFName.of('Subtype'));
+        if (!subtype || subtype.toString() !== '/Widget') continue;
+        const tName = annot.get(PDFName.of('T'));
+        if (!tName) continue;
+        const tStr = tName.decodeText ? tName.decodeText() : tName.toString().replace(/[()]/g,'');
+        if (registeredNames.has(tStr)) continue;
+        // Ensure /P is set on the widget
+        if (!annot.get(PDFName.of('P'))) annot.set(PDFName.of('P'), pageRef);
+        // Add to AcroForm Fields array
+        fieldsArray.push(annotRef);
+        registeredNames.add(tStr);
+      }
+
+      // Also ensure /P on all already-registered widgets
+      const regCount = fieldsArray.size ? fieldsArray.size() : 0;
+      for (let i = 0; i < regCount; i++) {
+        const ref = fieldsArray.get(i);
+        const obj = ctx.lookup(ref);
+        if (!obj || !obj.get) continue;
+        if (!obj.get(PDFName.of('P'))) obj.set(PDFName.of('P'), pageRef);
+      }
     }
 
     const form = pdfDoc.getForm();
 
-    // ── Fill text fields ──
+    // ── Step 2: Fill all text fields ──
     const setText = (name, val) => {
       try { form.getTextField(name).setText(val || ''); } catch(e) {}
     };
@@ -1555,22 +1600,22 @@ async function generatePDF() {
     setText('Print_3', v('printRMA'));
     setText('Unit', v('unitNum'));
 
-    // Text14 = advice / explanation — explicit small font to match form's visual style
+    // ── Date: shared field with 3 widget positions (Call Date, Patient date, Witness date).
+    //    Same date for all three — setting the field once populates all positions. ──
+    setText('Date', v('callDate'));
+
+    // Text14.0/Text14.1: advice and patient explanation free-text boxes
     const setTextSmall = (name, val) => {
       try {
         const field = form.getTextField(name);
-        field.setFontSize(12);
+        field.setFontSize(10);
         field.setText(val || '');
       } catch(e) {}
     };
     setTextSmall('Text14.0', v('adviceGiven'));
     setTextSmall('Text14.1', v('patientExplanation'));
 
-    // ── Date field: one shared field with 3 widget positions (Call Date, Patient sig date,
-    //    Witness sig date). Setting it once populates all three. Call date drives all. ──
-    setText('Date', v('callDate'));
-
-    // ── Checkbox helper: use simple check()/uncheck() — reliable with pdf-lib flatten ──
+    // ── Step 3: Set checkboxes — simple check()/uncheck(), no flatten needed ──
     const setCheckbox = (name, isChecked) => {
       try {
         const cb = form.getCheckBox(name);
@@ -1578,48 +1623,47 @@ async function generatePDF() {
       } catch(e) {}
     };
 
-    // ── Sex checkboxes (Check Box15 = M, Check Box16 = F) ──
+    // Sex (Check Box15 = M, Check Box16 = F)
     const sex = document.querySelector('input[name="sex"]:checked')?.value;
     setCheckbox('Check Box15', sex === 'M');
     setCheckbox('Check Box16', sex === 'F');
 
-    // ── Same as Home (Check Box4) ──
+    // Same as Home Address
     setCheckbox('Check Box4', sameAsHome);
 
-    // ── Patient Informed (Check Box5.0-5.3) ──
-    for (let i=0; i<4; i++) setCheckbox(`Check Box5.${i}`, checked(`informed${i}`));
+    // Patient Informed (Check Box5.0–5.3)
+    for (let i = 0; i < 4; i++) setCheckbox(`Check Box5.${i}`, checked(`informed${i}`));
 
-    // ── Disposition (Check Box7.0 = refused all, Check Box7.1 = refused transport) ──
+    // Disposition (Check Box7.0 = refused all, Check Box7.1 = refused transport)
     const disp = radioVal('disposition');
-    for (let i=0; i<2; i++) setCheckbox(`Check Box7.${i}`, disp === String(i));
+    for (let i = 0; i < 2; i++) setCheckbox(`Check Box7.${i}`, disp === String(i));
 
-    // ── Medical Direction Contacted Via (Check Box8.0.0-2) ──
+    // Medical Direction — Contacted Via (Check Box8.0.0–2)
     const cv = radioVal('contactedVia');
-    for (let i=0; i<3; i++) setCheckbox(`Check Box8.0.${i}`, cv === String(i));
+    for (let i = 0; i < 3; i++) setCheckbox(`Check Box8.0.${i}`, cv === String(i));
 
-    // ── Orders (Check Box8.1.0-2) ──
+    // Medical Direction — Orders (Check Box8.1.0–2)
     const ord = radioVal('mdOrders');
-    for (let i=0; i<3; i++) setCheckbox(`Check Box8.1.${i}`, ord === String(i));
+    for (let i = 0; i < 3; i++) setCheckbox(`Check Box8.1.${i}`, ord === String(i));
 
-    // ── Relationship (Check Box9.0-2 = Self/Relative/Friend, Check Box9.3.0-1 = Law/Other) ──
+    // Relationship (Check Box9.0=Self, .1=Relative, .2=Friend, 9.3.0=LawEnf, 9.3.1=Other)
     const rel = radioVal('relationship');
-    for (let i=0; i<3; i++) setCheckbox(`Check Box9.${i}`, rel === String(i));
+    for (let i = 0; i < 3; i++) setCheckbox(`Check Box9.${i}`, rel === String(i));
     setCheckbox('Check Box9.3.0', rel === '3');
     setCheckbox('Check Box9.3.1', rel === '4');
 
-    // ── Signer type (Check Box10.0.0=Patient, .1=Parent, .2=Legal Guardian) ──
+    // Signer type (Check Box10.0.0=Patient, .0.1=Parent, .0.2=Legal Guardian)
     const signerVal = radioVal('signerType');
     setCheckbox('Check Box10.0.0', signerVal === 'patient');
     setCheckbox('Check Box10.0.1', signerVal === 'parent');
     setCheckbox('Check Box10.0.2', signerVal === 'guardian');
     setCheckbox('Check Box10.1.0', checked('patientRefused'));
 
-    // ── Flatten form (bakes all field values and appearances into static content) ──
-    form.flatten();
+    // ── Step 4: NO flatten — all fields stay live and manually editable in the PDF viewer.
+    //    Signatures are drawn as images directly onto the page content layer instead.
 
-    // ── Draw signatures as images ──
+    // ── Step 5: Draw signatures as images onto the page content layer ──
     const page = pdfDoc.getPages()[0];
-    const pageH = page.getHeight(); // PDF y=0 is bottom
 
     async function drawSig(canvasId, rect) {
       const canvas = document.getElementById(canvasId);
@@ -1627,18 +1671,14 @@ async function generatePDF() {
       if (!dataUrl) return;
       const imgBytes = Uint8Array.from(atob(dataUrl.split(',')[1]), c => c.charCodeAt(0));
       const img = await pdfDoc.embedPng(imgBytes);
-      const [x0, y0, x1, y1] = rect; // PDF coords: y0=bottom, y1=top
-      page.drawImage(img, {
-        x: x0, y: y0,
-        width: x1 - x0,
-        height: y1 - y0,
-        opacity: 1
-      });
+      const [x0, y0, x1, y1] = rect;
+      page.drawImage(img, { x: x0, y: y0, width: x1 - x0, height: y1 - y0, opacity: 1 });
     }
 
-    await drawSig('sigPatient',  [36.0835,  64.7589, 210.023, 110.434]);
-    await drawSig('sigWitness',  [222.021,  64.7589, 393.773, 110.434]);
-    await drawSig('sigRMA',      [404.246,  64.7589, 575.998, 110.434]);
+    // Sig rects match Signature11/12/13 field rects exactly
+    await drawSig('sigPatient', [36.0835,  64.7589, 210.023, 110.434]);
+    await drawSig('sigWitness', [222.021,  64.7589, 393.773, 110.434]);
+    await drawSig('sigRMA',     [404.246,  64.7589, 575.998, 110.434]);
 
     // ── Save & Download ──
     const outBytes = await pdfDoc.save();

@@ -1013,10 +1013,6 @@
             <label>Print Name</label>
             <input type="text" id="printPatient" placeholder="Print name">
           </div>
-          <div class="field">
-            <label>Date</label>
-            <input type="text" id="datePatient" placeholder="MM/DD/YYYY" oninput="formatDOB(this)">
-          </div>
         </div>
 
         <!-- Witness Signature -->
@@ -1030,10 +1026,6 @@
           <div class="field">
             <label>Print Name</label>
             <input type="text" id="printWitness" placeholder="Print name">
-          </div>
-          <div class="field">
-            <label>Date</label>
-            <input type="text" id="dateWitness" placeholder="MM/DD/YYYY" oninput="formatDOB(this)">
           </div>
         </div>
 
@@ -1165,8 +1157,6 @@ function getTodayFormatted() {
 document.addEventListener('DOMContentLoaded', () => {
   const today = getTodayFormatted();
   document.getElementById('callDate').value = today;
-  document.getElementById('datePatient').value = today;
-  document.getElementById('dateWitness').value = today;
 });
 
 // ── Patient name change → update downstream fields ────────────────────────
@@ -1522,7 +1512,7 @@ async function generatePDF() {
   btn.textContent = 'Generating...';
 
   try {
-    const { PDFDocument, rgb } = PDFLib;
+    const { PDFDocument } = PDFLib;
 
     // Load template
     const pdfBytes = Uint8Array.from(atob(PDF_B64), c => c.charCodeAt(0));
@@ -1576,32 +1566,16 @@ async function generatePDF() {
     setTextSmall('Text14.0', v('adviceGiven'));
     setTextSmall('Text14.1', v('patientExplanation'));
 
-    // Helper: properly set checkbox appearance for pdf-lib flatten.
-    // pdf-lib's flatten reads AP.N as either a PDFRef (direct stream) or PDFDict (keyed by value).
-    // In this form AP.N is a PDFRef pointing to a dict — so we must replace AP.N with
-    // a direct ref to the Yes or Off stream to get the right appearance.
-    const PDFName = PDFLib.PDFName;
-    const PDFRef = PDFLib.PDFRef;
+    // ── Date field: one shared field with 3 widget positions (Call Date, Patient sig date,
+    //    Witness sig date). Setting it once populates all three. Call date drives all. ──
+    setText('Date', v('callDate'));
+
+    // ── Checkbox helper: use simple check()/uncheck() — reliable with pdf-lib flatten ──
     const setCheckbox = (name, isChecked) => {
       try {
         const cb = form.getCheckBox(name);
-        const val = isChecked ? PDFName.of('Yes') : PDFName.of('Off');
-        // Set the field value
-        cb.acroField.dict.set(PDFName.of('V'), val);
-        // Replace AP.N with a direct ref to the correct appearance stream
-        const widget = cb.acroField.getWidgets()[0];
-        if (!widget) return;
-        const apRef = widget.getNormalAppearance();
-        const apDict = pdfDoc.context.lookup(apRef);
-        if (apDict && apDict.get) {
-          const streamRef = apDict.get(val) || apDict.get(PDFName.of('Off'));
-          if (streamRef instanceof PDFRef) {
-            const AP = cb.acroField.dict.get(PDFName.of('AP'));
-            const APobj = pdfDoc.context.lookup(AP);
-            if (APobj && APobj.set) APobj.set(PDFName.of('N'), streamRef);
-          }
-        }
-      } catch(e) { /* field not found or already flattened */ }
+        isChecked ? cb.check() : cb.uncheck();
+      } catch(e) {}
     };
 
     // ── Sex checkboxes (Check Box15 = M, Check Box16 = F) ──
@@ -1615,7 +1589,7 @@ async function generatePDF() {
     // ── Patient Informed (Check Box5.0-5.3) ──
     for (let i=0; i<4; i++) setCheckbox(`Check Box5.${i}`, checked(`informed${i}`));
 
-    // ── Disposition (Check Box7.0, Check Box7.1) ──
+    // ── Disposition (Check Box7.0 = refused all, Check Box7.1 = refused transport) ──
     const disp = radioVal('disposition');
     for (let i=0; i<2; i++) setCheckbox(`Check Box7.${i}`, disp === String(i));
 
@@ -1627,7 +1601,7 @@ async function generatePDF() {
     const ord = radioVal('mdOrders');
     for (let i=0; i<3; i++) setCheckbox(`Check Box8.1.${i}`, ord === String(i));
 
-    // ── Relationship (Check Box9.0-2, Check Box9.3.0-1) ──
+    // ── Relationship (Check Box9.0-2 = Self/Relative/Friend, Check Box9.3.0-1 = Law/Other) ──
     const rel = radioVal('relationship');
     for (let i=0; i<3; i++) setCheckbox(`Check Box9.${i}`, rel === String(i));
     setCheckbox('Check Box9.3.0', rel === '3');
@@ -1640,8 +1614,8 @@ async function generatePDF() {
     setCheckbox('Check Box10.0.2', signerVal === 'guardian');
     setCheckbox('Check Box10.1.0', checked('patientRefused'));
 
-    // ── Flatten form (so signatures can be drawn as images) ──
-    form.flatten({ updateFieldAppearances: false });
+    // ── Flatten form (bakes all field values and appearances into static content) ──
+    form.flatten();
 
     // ── Draw signatures as images ──
     const page = pdfDoc.getPages()[0];
@@ -1665,21 +1639,6 @@ async function generatePDF() {
     await drawSig('sigPatient',  [36.0835,  64.7589, 210.023, 110.434]);
     await drawSig('sigWitness',  [222.021,  64.7589, 393.773, 110.434]);
     await drawSig('sigRMA',      [404.246,  64.7589, 575.998, 110.434]);
-
-    // ── Write date fields (text annotations since form is flattened) ──
-    // Add date text via drawText after flatten
-    const addText = (text, x, y, size=9) => {
-      if (!text) return;
-      page.drawText(text, { x, y, size, color: rgb(0,0,0) });
-    };
-
-    // Date fields are at bottom (~y=27-43 range in PDF coords)
-    // From layout: Date for patient is below Print at y≈27, witness same row
-    // Write all 3 date values as text over flattened form at exact PDF coords
-    // Date kid[0] = Call Date (top of form), kid[1] = Patient sig date, kid[2] = Witness sig date
-    addText(v('callDate'),    144.1, 691.0, 10);
-    addText(v('datePatient'),  58.0,  29.0, 10);
-    addText(v('dateWitness'), 243.5,  29.0, 10);
 
     // ── Save & Download ──
     const outBytes = await pdfDoc.save();

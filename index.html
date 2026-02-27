@@ -2354,13 +2354,29 @@ function _clearAutoSave() {
 
 // ── New Form ──────────────────────────────────────────────────────────────────
 async function newForm() {
-  // Auto-save current form first, then clear everything
-  await _doAutoSave();
-  // Export the current autosave as a file so user can retrieve it
-  await _exportAutoSaveAsFile();
-  // Clear autosave slot and reset form
+  const data = _collectFormData();
+  const hasContent = Object.values(data.texts).some(v => v && v.trim()) ||
+                     Object.values(data.radios).some(v => v !== null && v !== undefined && v !== '') ||
+                     Object.values(data.checks).some(v => v) ||
+                     Object.values(data.sigs).some(v => v);
+
+  if (hasContent) {
+    const save = confirm('Save a copy of the current form before starting a new one?');
+    if (save) {
+      await _doAutoSave();
+      await _exportAutoSaveAsFile();
+    }
+  }
+
   _clearAutoSave();
   _resetForm();
+
+  // Reset save status in menu
+  const status = document.getElementById('hamburgerSaveStatus');
+  const text = document.getElementById('hamburgerSaveText');
+  if (status) status.classList.remove('saved');
+  if (text) text.textContent = 'No changes yet';
+
   showToast('✓ New form ready');
 }
 

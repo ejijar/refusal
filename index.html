@@ -1187,8 +1187,12 @@
     <span></span>
     <span></span>
   </button>
-  <!-- Hamburger Dropdown Menu -->
-  <div class="hamburger-menu" id="hamburgerMenu">
+  <!-- Hidden file input for loading encrypted saves -->
+  <input type="file" id="loadFileInput" accept=".ncems" style="display:none" onchange="handleLoadFile(this)">
+</header>
+
+<!-- Hamburger Dropdown Menu (outside header to avoid stacking context trap) -->
+<div class="hamburger-menu" id="hamburgerMenu">
     <div class="hamburger-save-status" id="hamburgerSaveStatus">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
       <span id="hamburgerSaveText">No changes yet</span>
@@ -1226,9 +1230,6 @@
     <div class="hamburger-menu-divider"></div>
     <div class="hamburger-menu-version">v3.5</div>
   </div>
-  <!-- Hidden file input for loading encrypted saves -->
-  <input type="file" id="loadFileInput" accept=".ncems" style="display:none" onchange="handleLoadFile(this)">
-</header>
 
 <main class="main">
 

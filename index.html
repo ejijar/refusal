@@ -1201,6 +1201,10 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Load Form
     </div>
+    <div class="hamburger-menu-item" onclick="saveFormToFile(); closeHamburgerMenu()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save to File
+    </div>
     <div class="hamburger-menu-divider"></div>
     <div class="hamburger-menu-item" onclick="openChangePass(); closeHamburgerMenu()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
@@ -2489,7 +2493,36 @@ async function _exportAutoSaveAsFile() {
   } catch(e) { console.warn('Export on new form failed:', e); }
 }
 
-function _resetForm() {
+async function saveFormToFile() {
+  try {
+    const passcode = getStoredPasscode();
+    const plaintext = JSON.stringify(_collectFormData());
+    const enc = new TextEncoder();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv   = crypto.getRandomValues(new Uint8Array(12));
+    const key  = await _deriveKey(passcode, salt);
+    const cipherBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+    const magic = new Uint8Array([0x4E,0x43,0x45,0x4D]);
+    const combined = new Uint8Array(4 + 16 + 12 + cipherBuf.byteLength);
+    combined.set(magic, 0);
+    combined.set(salt, 4);
+    combined.set(iv, 20);
+    combined.set(new Uint8Array(cipherBuf), 32);
+    const blob = new Blob([combined], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const date = (document.getElementById('callDate')?.value || new Date().toLocaleDateString()).replace(/\//g,'-');
+    const addr = (document.getElementById('address')?.value || '').replace(/[<>:"/\\|?*]/g,'').trim() || 'Unknown Address';
+    a.download = `${date} ${addr} Refusal Data.ncems`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('✓ File saved');
+  } catch(e) {
+    console.warn('Save to file failed:', e);
+    showToast('✗ Save failed', 3000);
+  }
+}
   // Text inputs
   const textIds = [
     'callDate','patientName','phone','dob','age','address',

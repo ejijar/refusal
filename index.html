@@ -2400,8 +2400,8 @@ async function _exportAutoSaveAsFile() {
     const a = document.createElement('a');
     a.href = url;
     const date = (document.getElementById('callDate')?.value || new Date().toLocaleDateString()).replace(/\//g,'-');
-    const name = (document.getElementById('patientName')?.value || 'form').replace(/[<>:"/\\|?*]/g,'').trim() || 'form';
-    a.download = `${date} ${name}.ncems`;
+    const addr = (document.getElementById('address')?.value || '').replace(/[<>:"/\\|?*]/g,'').trim() || 'Unknown Address';
+    a.download = `${date} ${addr} Refusal Data.ncems`;
     a.click();
     URL.revokeObjectURL(url);
   } catch(e) { console.warn('Export on new form failed:', e); }

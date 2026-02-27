@@ -1522,23 +1522,27 @@ async function generatePDF() {
     const ctx = pdfDoc.context;
 
     // ── Step 1: Register all orphaned widget annotations into the AcroForm /Fields tree.
-    //    This PDF has many checkboxes + Text14.1 that live only in the page /Annots array
-    //    but are absent from AcroForm/Fields, so pdf-lib's form.getCheckBox/getTextField
-    //    cannot find them. We add them so pdf-lib can set their values normally.
+    //    This PDF has checkboxes + Text14.1 that exist only in page /Annots but are absent
+    //    from AcroForm/Fields. pdf-lib's getCheckBox/getTextField only searches the Fields
+    //    tree, so they silently fail. We register them here so all fields become accessible.
     {
-      const acroForm = pdfDoc.catalog.get(PDFName.of('AcroForm'));
-      const fieldsArray = acroForm.get(PDFName.of('Fields'));
-      const pageRef = pdfDoc.getPage(0).ref;
-      const pageAnnots = pdfDoc.getPage(0).node.get(PDFName.of('Annots'));
+      // Get the raw AcroForm PDFDict via the context (pdfDoc.catalog is a class, not a dict)
+      const catalogDict = ctx.lookup(ctx.trailerInfo.Root);
+      const acroFormVal = catalogDict.get(PDFName.of('AcroForm'));
+      const acroFormDict = ctx.lookup(acroFormVal);
+      const fieldsArray = acroFormDict.get(PDFName.of('Fields'));
 
-      // Names already in the Fields array
+      const pageRef = pdfDoc.getPage(0).ref;
+      const pageNode = pdfDoc.getPage(0).node;
+      const pageAnnots = pageNode.get(PDFName.of('Annots'));
+
+      // Collect names already in the Fields tree (walk kids too)
       const registeredNames = new Set();
       const collectNames = (arr) => {
         if (!arr) return;
         const len = arr.size ? arr.size() : 0;
         for (let i = 0; i < len; i++) {
-          const ref = arr.get(i);
-          const obj = ctx.lookup(ref);
+          const obj = ctx.lookup(arr.get(i));
           if (!obj || !obj.get) continue;
           const t = obj.get(PDFName.of('T'));
           if (t) registeredNames.add(t.decodeText ? t.decodeText() : t.toString().replace(/[()]/g,''));
@@ -1548,7 +1552,7 @@ async function generatePDF() {
       };
       collectNames(fieldsArray);
 
-      // Walk page annots and register any widget with a /T not yet in Fields
+      // Walk page annots; register any /Widget with a /T not yet in Fields
       const annotCount = pageAnnots ? (pageAnnots.size ? pageAnnots.size() : 0) : 0;
       for (let i = 0; i < annotCount; i++) {
         const annotRef = pageAnnots.get(i);
@@ -1560,20 +1564,16 @@ async function generatePDF() {
         if (!tName) continue;
         const tStr = tName.decodeText ? tName.decodeText() : tName.toString().replace(/[()]/g,'');
         if (registeredNames.has(tStr)) continue;
-        // Ensure /P is set on the widget
         if (!annot.get(PDFName.of('P'))) annot.set(PDFName.of('P'), pageRef);
-        // Add to AcroForm Fields array
         fieldsArray.push(annotRef);
         registeredNames.add(tStr);
       }
 
-      // Also ensure /P on all already-registered widgets
+      // Ensure /P on all already-registered top-level widgets
       const regCount = fieldsArray.size ? fieldsArray.size() : 0;
       for (let i = 0; i < regCount; i++) {
-        const ref = fieldsArray.get(i);
-        const obj = ctx.lookup(ref);
-        if (!obj || !obj.get) continue;
-        if (!obj.get(PDFName.of('P'))) obj.set(PDFName.of('P'), pageRef);
+        const obj = ctx.lookup(fieldsArray.get(i));
+        if (obj && obj.get && !obj.get(PDFName.of('P'))) obj.set(PDFName.of('P'), pageRef);
       }
     }
 

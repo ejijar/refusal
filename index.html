@@ -480,6 +480,7 @@
     justify-content: space-between;
     flex-shrink: 0;
     gap: 8px;
+    position: relative;
   }
   .sig-modal-title {
     font-family: 'IBM Plex Mono', monospace;
@@ -494,31 +495,37 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    flex: 1;
+    justify-content: flex-end;
   }
   .sig-modal-nav {
     display: flex;
     gap: 6px;
     align-items: center;
-    margin-left: 4px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
   }
   .sig-modal-step {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
     color: var(--text-muted);
   }
-  .sig-action-btn {
+  .sig-clear-btn {
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
     border-radius: 5px;
-    width: 32px; height: 32px;
-    display: flex; align-items: center; justify-content: center;
+    padding: 7px 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     cursor: pointer;
-    font-size: 16px;
     transition: all 0.15s;
   }
-  .sig-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-  .sig-action-btn:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+  .sig-clear-btn:hover { border-color: var(--danger); color: var(--danger); }
   .sig-nav-btn {
     background: transparent;
     border: 1px solid var(--border);
@@ -1110,7 +1117,7 @@
 <div id="loginScreen">
   <div class="login-logo">Patient Refusal Form</div>
   <div class="login-subtitle">New Canaan<br>Emergency Medical Services</div>
-  <div class="login-version">v3.8</div>
+  <div class="login-version">v3.9</div>
   <div class="login-username" id="loginUsername" style="display:none">EMT</div>
   <div class="login-dots" id="loginDots">
     <div class="login-dot" id="dot0"></div>
@@ -1991,7 +1998,7 @@ function onSignerPatientChange() {
 const SIG_CONFIGS = [
   { id: 'sigPatient', title: 'Patient Signature',   nameLabel: 'Printed Name', nameField: 'printPatient', btnId: 'btnPatient', watermark: 'Patient' },
   { id: 'sigWitness', title: 'Witness',              nameLabel: 'Printed Name', nameField: 'printWitness', btnId: 'btnWitness', watermark: 'Witness' },
-  { id: 'sigRMA',     title: 'RMA Administered By',  nameLabel: 'Printed Name', nameField: 'printRMA',     btnId: 'btnRMA',     watermark: 'EMT'     },
+  { id: 'sigRMA',     title: 'RMA Administered By',  nameLabel: 'Printed Name', nameField: 'printRMA',     btnId: 'btnRMA',     watermark: 'EMT',    unitField: 'unitNum' },
 ];
 
 let sigModalIdx = 0;
@@ -2059,6 +2066,16 @@ function _buildSigModal() {
   document.getElementById('sigModalStep').textContent  = `${sigModalIdx + 1} of ${SIG_CONFIGS.length}`;
   document.getElementById('sigModalNameLabel').textContent = cfg.nameLabel;
   document.getElementById('sigModalNameInput').value = document.getElementById(cfg.nameField)?.value || '';
+
+  const unitRow = document.getElementById('sigModalUnitRow');
+  const unitInput = document.getElementById('sigModalUnitInput');
+  if (cfg.unitField) {
+    unitRow.style.display = '';
+    unitInput.value = document.getElementById(cfg.unitField)?.value || '';
+  } else {
+    unitRow.style.display = 'none';
+    unitInput.value = '';
+  }
 
   // On orientation change, only carry forward modal canvas data if the user
   // has actually drawn something (tracked via dataset.hasDrawing).
@@ -2133,7 +2150,6 @@ function _buildSigModal() {
     drawing = true; const p = pos(e); lastX = p.x; lastY = p.y;
     ctx.beginPath(); ctx.arc(lastX, lastY, ctx.lineWidth / 2, 0, Math.PI * 2);
     ctx.fill(); ctx.beginPath(); ctx.moveTo(lastX, lastY);
-    _updateModalBtns();
   });
   fresh.addEventListener('mousemove', e => {
     if (!drawing) return;
@@ -2151,7 +2167,6 @@ function _buildSigModal() {
     ctx.fillStyle = ctx.strokeStyle;
     ctx.beginPath(); ctx.arc(lastX, lastY, ctx.lineWidth / 2, 0, Math.PI * 2);
     ctx.fill(); ctx.beginPath(); ctx.moveTo(lastX, lastY);
-    _updateModalBtns();
   }, { passive: false });
   fresh.addEventListener('touchmove', e => {
     if (!drawing) return; e.preventDefault();
@@ -2160,36 +2175,15 @@ function _buildSigModal() {
   fresh.addEventListener('touchend', () => { drawing = false; });
 
   sigModalPad = { canvas: fresh, ctx, cssW, cssH };
-
-  document.getElementById('sigModalUndo').disabled = true;
-  document.getElementById('sigModalRedo').disabled = true;
 }
 
-function _updateModalBtns() {
-  document.getElementById('sigModalUndo').disabled = sigModalHistory.length === 0;
-  document.getElementById('sigModalRedo').disabled = sigModalFuture.length  === 0;
-}
 
-function sigModalUndo() {
-  if (!sigModalHistory.length || !sigModalPad) return;
+function sigModalClear() {
+  if (!sigModalPad) return;
   const { canvas, ctx, cssW, cssH } = sigModalPad;
-  const dpr = window.devicePixelRatio || 1;
-  sigModalFuture.push(canvas.toDataURL());
-  const prev = sigModalHistory.pop();
   ctx.clearRect(0, 0, cssW, cssH);
-  if (prev) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, cssW, cssH); img.src = prev; }
-  _updateModalBtns();
-}
-
-function sigModalRedo() {
-  if (!sigModalFuture.length || !sigModalPad) return;
-  const { canvas, ctx, cssW, cssH } = sigModalPad;
-  const dpr = window.devicePixelRatio || 1;
-  sigModalHistory.push(canvas.toDataURL());
-  const next = sigModalFuture.pop();
-  ctx.clearRect(0, 0, cssW, cssH);
-  if (next) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, cssW, cssH); img.src = next; }
-  _updateModalBtns();
+  sigModalHistory = [];
+  sigModalFuture = [];
 }
 
 function _commitSigModal() {
@@ -2200,6 +2194,13 @@ function _commitSigModal() {
   const nameVal = document.getElementById('sigModalNameInput').value;
   const nameField = document.getElementById(cfg.nameField);
   if (nameField) nameField.value = nameVal;
+
+  // Save unit # back to form (RMA only)
+  if (cfg.unitField) {
+    const unitVal = document.getElementById('sigModalUnitInput').value;
+    const unitField = document.getElementById(cfg.unitField);
+    if (unitField) unitField.value = unitVal;
+  }
 
   // Copy modal canvas → inline preview canvas
   const modalCanvas = sigModalPad.canvas;
@@ -3091,15 +3092,14 @@ async function generatePDF() {
 <div id="sigModal" onclick="event.stopPropagation()">
   <div class="sig-modal-header">
     <span class="sig-modal-title" id="sigModalTitle">Signature</span>
-    <div class="sig-modal-actions">
-      <button class="sig-action-btn" onclick="sigModalUndo()" id="sigModalUndo" title="Undo" disabled>↩</button>
-      <button class="sig-action-btn" onclick="sigModalRedo()" id="sigModalRedo" title="Redo" disabled>↪</button>
-      <button class="sig-modal-done" onclick="closeSigModal()">Done</button>
-    </div>
     <div class="sig-modal-nav">
-      <span class="sig-modal-step" id="sigModalStep"></span>
       <button class="sig-nav-btn" onclick="event.stopPropagation(); sigModalNav(-1)">◀</button>
+      <span class="sig-modal-step" id="sigModalStep"></span>
       <button class="sig-nav-btn" onclick="event.stopPropagation(); sigModalNav(1)">▶</button>
+    </div>
+    <div class="sig-modal-actions">
+      <button class="sig-clear-btn" onclick="sigModalClear()">Clear</button>
+      <button class="sig-modal-done" onclick="closeSigModal()">Done</button>
     </div>
   </div>
   <div class="sig-modal-canvas-wrap">
@@ -3107,6 +3107,10 @@ async function generatePDF() {
     <div class="sig-modal-name">
       <label id="sigModalNameLabel">Printed Name</label>
       <input type="text" id="sigModalNameInput" placeholder="Printed name" autocomplete="off">
+    </div>
+    <div class="sig-modal-name" id="sigModalUnitRow" style="display:none">
+      <label>Unit #</label>
+      <input type="text" id="sigModalUnitInput" placeholder="Unit number" autocomplete="off">
     </div>
     <div class="sig-rotate-hint">↻ &nbsp;Rotate to landscape for a wider signing area</div>
   </div>

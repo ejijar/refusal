@@ -615,6 +615,22 @@
     flex-shrink: 0;
   }
 
+  /* Shown only in mobile landscape — prompts user to rotate back for name fields */
+  .sig-landscape-hint {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    margin-top: 2px;
+  }
+
   /* Backdrop for desktop */
   #sigModalBackdrop {
     display: none;
@@ -654,14 +670,18 @@
     .sig-rotate-hint { display: flex !important; }
   }
 
-  /* Mobile landscape: full-screen */
-  @media (max-width: 699px) and (orientation: landscape) {
+  /* Mobile landscape: full-screen, signature only */
+  @media (max-width: 900px) and (orientation: landscape) {
     #sigModal {
       top: 0; bottom: 0; left: 0; right: 0;
       height: 100%; border-radius: 0; transform: none;
     }
-    #sigModalCanvas { min-height: 100px; max-height: none; }
+    #sigModalCanvas { min-height: 100px; max-height: none; flex: 1; }
     .sig-rotate-hint { display: none !important; }
+    /* Hide name/unit fields in landscape — sign only */
+    .sig-modal-name { display: none !important; }
+    /* Show the rotate-back hint instead */
+    .sig-landscape-hint { display: flex !important; }
   }
 
   /* ── Collapsible medical direction ── */
@@ -2087,6 +2107,18 @@ function openSigModal(idx) {
   document.getElementById('sigModalBackdrop').style.display = 'block';
   setTimeout(() => _buildSigModal(), 80);
   window.addEventListener('resize', _onSigModalResize);
+  window.addEventListener('orientationchange', _onSigModalOrientationChange);
+}
+
+function _onSigModalOrientationChange() {
+  // Commit current drawing first, then rebuild after orientation settles
+  setTimeout(() => {
+    if (document.getElementById('sigModal').classList.contains('active')) {
+      // Commit canvas (not name fields — orientation may have been landscape)
+      _commitSigModalCanvasOnly();
+      _buildSigModal();
+    }
+  }, 300);
 }
 
 function _onSigModalResize() {
@@ -2104,6 +2136,7 @@ function closeSigModal() {
   document.getElementById('sigModalBackdrop').style.display = 'none';
   sigModalPad = null;
   window.removeEventListener('resize', _onSigModalResize);
+  window.removeEventListener('orientationchange', _onSigModalOrientationChange);
   clearTimeout(_sigResizeTimer);
   scheduleAutoSave();
 }
@@ -2264,20 +2297,40 @@ function sigModalClear() {
   _drawModalWatermark(ctx, cssW, cssH, cfg.watermark);
 }
 
+// Commits only the canvas drawing (not name/unit inputs).
+// Used during orientation changes so we preserve the drawing across rebuilds
+// without accidentally overwriting name fields that were hidden in landscape.
+function _commitSigModalCanvasOnly() {
+  if (!sigModalPad) return;
+  const cfg = SIG_CONFIGS[sigModalIdx];
+  const modalCanvas = sigModalPad.canvas;
+  const inlineCanvas = document.getElementById(cfg.id);
+  if (!inlineCanvas) return;
+  const hasDrawing = modalCanvas.dataset.hasDrawing === 'true';
+  const modalData = hasDrawing ? modalCanvas.toDataURL() : null;
+  inlineCanvas._sigDataURL = (hasDrawing && modalData) ? modalData : null;
+}
+
 function _commitSigModal() {
   if (!sigModalPad) return;
   const cfg = SIG_CONFIGS[sigModalIdx];
 
-  // Save name back to form
-  const nameVal = document.getElementById('sigModalNameInput').value;
-  const nameField = document.getElementById(cfg.nameField);
-  if (nameField) nameField.value = nameVal;
+  // In mobile landscape, name/unit fields are hidden — don't read them
+  // (they would be empty and would clobber values entered in portrait)
+  const isLandscape = window.matchMedia('(orientation: landscape) and (max-width: 900px)').matches;
 
-  // Save unit # back to form (RMA only)
-  if (cfg.unitField) {
-    const unitVal = document.getElementById('sigModalUnitInput').value;
-    const unitField = document.getElementById(cfg.unitField);
-    if (unitField) unitField.value = unitVal;
+  if (!isLandscape) {
+    // Save name back to form
+    const nameVal = document.getElementById('sigModalNameInput').value;
+    const nameField = document.getElementById(cfg.nameField);
+    if (nameField) nameField.value = nameVal;
+
+    // Save unit # back to form (RMA only)
+    if (cfg.unitField) {
+      const unitVal = document.getElementById('sigModalUnitInput').value;
+      const unitField = document.getElementById(cfg.unitField);
+      if (unitField) unitField.value = unitVal;
+    }
   }
 
   // Copy modal canvas → inline preview canvas
@@ -3209,6 +3262,7 @@ async function generatePDF() {
       <input type="text" id="sigModalUnitInput" placeholder="Unit number" autocomplete="off">
     </div>
     <div class="sig-rotate-hint">↻ &nbsp;Rotate to landscape for a wider signing area</div>
+    <div class="sig-landscape-hint">↺ &nbsp;Rotate to portrait to fill in name fields</div>
   </div>
 </div>
 

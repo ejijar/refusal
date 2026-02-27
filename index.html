@@ -1205,7 +1205,7 @@
 <div id="loginScreen">
   <div class="login-logo">Patient Refusal Form</div>
   <div class="login-subtitle">New Canaan<br>Emergency Medical Services</div>
-  <div class="login-version">v4.4</div>
+  <div class="login-version" id="loginVersion"></div>
   <div class="login-username" id="loginUsername" style="display:none">EMT</div>
   <div class="login-dots" id="loginDots">
     <div class="login-dot" id="dot0"></div>
@@ -1352,7 +1352,7 @@
       </div>
     </div>
     <div class="hamburger-menu-divider"></div>
-    <div class="hamburger-menu-version">v3.7</div>
+    <div class="hamburger-menu-version" id="menuVersion"></div>
   </div>
 
 <main class="main">
@@ -1674,7 +1674,7 @@
           <button class="sig-sign-btn" id="btnPatient" onclick="openSigModal(0)">✍ Sign</button>
           <div class="field">
             <label>Print Name</label>
-            <input type="text" id="printPatient" placeholder="Print name">
+            <input type="text" id="printPatient" placeholder="Print name" autocomplete="off">
           </div>
         </div>
 
@@ -1689,7 +1689,7 @@
           <button class="sig-sign-btn" id="btnWitness" onclick="openSigModal(1)">✍ Sign</button>
           <div class="field">
             <label>Print Name</label>
-            <input type="text" id="printWitness" placeholder="Print name">
+            <input type="text" id="printWitness" placeholder="Print name" autocomplete="off">
           </div>
         </div>
 
@@ -1704,7 +1704,7 @@
           <button class="sig-sign-btn" id="btnRMA" onclick="openSigModal(2)">✍ Sign</button>
           <div class="field">
             <label>Print Name</label>
-            <input type="text" id="printRMA" placeholder="Print name">
+            <input type="text" id="printRMA" placeholder="Print name" autocomplete="off">
           </div>
           <div class="field">
             <label>Unit #</label>
@@ -1731,6 +1731,9 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ── App Version ────────────────────────────────────────────────────────────
+const APP_VERSION = 'v4.5';
+
 // ── Login / Passcode System ────────────────────────────────────────────────
 const DEFAULT_PASSCODE = '1397';
 const DEFAULT_USERNAME = 'NCEMS EMT';
@@ -3276,5 +3279,9 @@ async function generatePDF() {
   </div>
 </div>
 
+<script>
+  document.getElementById('loginVersion').textContent = APP_VERSION;
+  document.getElementById('menuVersion').textContent = APP_VERSION;
+</script>
 </body>
 </html>

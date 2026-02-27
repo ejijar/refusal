@@ -958,12 +958,21 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    min-width: 190px;
+    min-width: 210px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    z-index: 99990;
+    z-index: 999995;
     overflow: hidden;
   }
   .hamburger-menu.open { display: block; }
+
+  /* Invisible backdrop to block clicks on page content when menu is open */
+  #hamburgerBackdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999994;
+  }
+  #hamburgerBackdrop.open { display: block; }
 
   .hamburger-menu-item {
     display: flex;
@@ -1191,6 +1200,9 @@
   <input type="file" id="loadFileInput" accept=".ncems" style="display:none" onchange="handleLoadFile(this)">
 </header>
 
+<!-- Hamburger backdrop to block page clicks when menu is open -->
+<div id="hamburgerBackdrop" onclick="closeHamburgerMenu()"></div>
+
 <!-- Hamburger Dropdown Menu (outside header to avoid stacking context trap) -->
 <div class="hamburger-menu" id="hamburgerMenu">
     <div class="hamburger-save-status" id="hamburgerSaveStatus">
@@ -1228,7 +1240,7 @@
       </div>
     </div>
     <div class="hamburger-menu-divider"></div>
-    <div class="hamburger-menu-version">v3.5</div>
+    <div class="hamburger-menu-version">v3.6</div>
   </div>
 
 <main class="main">
@@ -2805,16 +2817,20 @@ async function handleLoadFile(input) {
 // ── Hamburger Menu ──────────────────────────────────────────────────────────
 function toggleHamburgerMenu(e) {
   e.stopPropagation();
-  document.getElementById('hamburgerMenu').classList.toggle('open');
+  const menu = document.getElementById('hamburgerMenu');
+  const backdrop = document.getElementById('hamburgerBackdrop');
+  const isOpen = menu.classList.toggle('open');
+  backdrop.classList.toggle('open', isOpen);
 }
 function closeHamburgerMenu() {
   document.getElementById('hamburgerMenu').classList.remove('open');
+  document.getElementById('hamburgerBackdrop').classList.remove('open');
 }
 document.addEventListener('click', function(e) {
   const menu = document.getElementById('hamburgerMenu');
   const btn = document.getElementById('hamburgerBtn');
   if (menu && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
-    menu.classList.remove('open');
+    closeHamburgerMenu();
   }
 });
 

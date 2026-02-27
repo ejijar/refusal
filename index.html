@@ -1197,7 +1197,8 @@
     <span></span>
   </button>
   <!-- Hidden file input for loading encrypted saves -->
-  <input type="file" id="loadFileInput" accept=".ncems" style="display:none" onchange="handleLoadFile(this)">
+  <!-- accept="application/octet-stream,.ncems" bypasses Camera/Photos on iOS and opens Files > Recents directly -->
+  <input type="file" id="loadFileInput" accept="application/octet-stream,.ncems" style="display:none" onchange="handleLoadFile(this)">
 </header>
 
 <!-- Hamburger backdrop to block page clicks when menu is open -->
@@ -1240,7 +1241,7 @@
       </div>
     </div>
     <div class="hamburger-menu-divider"></div>
-    <div class="hamburger-menu-version">v3.6</div>
+    <div class="hamburger-menu-version">v3.7</div>
   </div>
 
 <main class="main">

@@ -1015,7 +1015,7 @@
       Change Passcode
     </div>
     <div class="hamburger-menu-divider"></div>
-    <div class="hamburger-menu-version">v2.7</div>
+    <div class="hamburger-menu-version">v2.9</div>
   </div>
 </header>
 
@@ -1823,11 +1823,15 @@ function _buildSigModal() {
   document.getElementById('sigModalNameLabel').textContent = cfg.nameLabel;
   document.getElementById('sigModalNameInput').value = document.getElementById(cfg.nameField)?.value || '';
 
-  // Carry forward existing sig data if rebuilding same slot (orientation change)
+  // On orientation change, only carry forward modal canvas data if the user
+  // has actually drawn something (tracked via dataset.hasDrawing).
+  // Never carry forward a canvas that only has a watermark — that would bake
+  // the watermark into the committed signature and produce a double watermark.
   const currentCanvas = document.getElementById('sigModalCanvas');
   const isSameSig = currentCanvas?.dataset.sigId === cfg.id;
   const existingDataURL = (() => {
     if (!isSameSig) return null;
+    if (currentCanvas?.dataset.hasDrawing !== 'true') return null;
     if (!currentCanvas || !currentCanvas.width) return null;
     try { return currentCanvas.toDataURL(); } catch(e) { return null; }
   })();
@@ -1860,6 +1864,7 @@ function _buildSigModal() {
   // Restore existing drawing
   const drawSrc = existingDataURL || getSigDataURL(cfg.id);
   if (drawSrc) {
+    fresh.dataset.hasDrawing = 'true';
     const img = new Image();
     img.onload = () => ctx.drawImage(img, 0, 0, cssW, cssH);
     img.src = drawSrc;
@@ -1886,6 +1891,7 @@ function _buildSigModal() {
 
   fresh.addEventListener('mousedown', e => {
     clearWatermarkOnce();
+    fresh.dataset.hasDrawing = 'true';
     sigModalHistory.push(fresh.toDataURL()); sigModalFuture = [];
     drawing = true; const p = pos(e); lastX = p.x; lastY = p.y;
     ctx.beginPath(); ctx.arc(lastX, lastY, ctx.lineWidth / 2, 0, Math.PI * 2);
@@ -1902,6 +1908,7 @@ function _buildSigModal() {
   fresh.addEventListener('touchstart', e => {
     e.preventDefault();
     clearWatermarkOnce();
+    fresh.dataset.hasDrawing = 'true';
     sigModalHistory.push(fresh.toDataURL()); sigModalFuture = [];
     drawing = true; const p = pos(e); lastX = p.x; lastY = p.y;
     ctx.fillStyle = ctx.strokeStyle;
@@ -1996,11 +2003,9 @@ function _updateSigUI(cfg) {
   const preview = document.getElementById(`preview${cfg.id.replace('sig','')}`);
   const btn = document.getElementById(cfg.btnId);
   const emptySpan = preview?.querySelector('.sig-preview-empty');
-  const watermarkSpan = preview?.querySelector('.sig-watermark');
   const isEmpty = isCanvasEmpty(cfg.id);
   
   if (emptySpan) emptySpan.style.display = isEmpty ? '' : 'none';
-  if (watermarkSpan) watermarkSpan.style.display = isEmpty ? '' : 'none';
   if (btn) {
     btn.textContent = isEmpty ? '✍ Sign' : '✎ Edit Signature';
     btn.classList.toggle('has-sig', !isEmpty);

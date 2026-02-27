@@ -555,6 +555,14 @@
     transition: background 0.15s;
   }
   .sig-modal-done:hover { background: #fb923c; }
+  .sig-modal-done:disabled {
+    background: var(--surface2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .sig-modal-done:disabled:hover { background: var(--surface2); }
   .sig-modal-canvas-wrap {
     flex: 1;
     padding: 12px;
@@ -601,6 +609,23 @@
     outline: none;
   }
   .sig-modal-name input:focus { border-color: var(--accent); }
+
+  /* "Needs attention" state — shown after signature drawn or on rotate-back if empty */
+  @keyframes sigFieldPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(249,115,22,0.5); }
+    60%  { box-shadow: 0 0 0 6px rgba(249,115,22,0); }
+    100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
+  }
+  .sig-modal-name.needs-attention label {
+    color: #f97316;
+  }
+  .sig-modal-name.needs-attention input {
+    background: #fff;
+    border-color: #f97316;
+    border-left-width: 3px;
+    color: #111;
+    animation: sigFieldPulse 0.7s ease-out 1;
+  }
 
   .sig-rotate-hint {
     display: none;
@@ -1732,7 +1757,7 @@
 
 <script>
 // ── App Version ────────────────────────────────────────────────────────────
-const APP_VERSION = 'v4.5';
+const APP_VERSION = 'v4.7';
 
 // ── Login / Passcode System ────────────────────────────────────────────────
 const DEFAULT_PASSCODE = '1397';
@@ -2265,7 +2290,7 @@ function _buildSigModal() {
     if (!drawing) return;
     const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); lastX = p.x; lastY = p.y;
   });
-  fresh.addEventListener('mouseup',    () => { drawing = false; });
+  fresh.addEventListener('mouseup',    () => { drawing = false; _updateSigDoneBtn({ triggerAttention: true }); });
   fresh.addEventListener('mouseleave', () => { drawing = false; });
 
   fresh.addEventListener('touchstart', e => {
@@ -2282,9 +2307,28 @@ function _buildSigModal() {
     if (!drawing) return; e.preventDefault();
     const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); lastX = p.x; lastY = p.y;
   }, { passive: false });
-  fresh.addEventListener('touchend', () => { drawing = false; });
+  fresh.addEventListener('touchend', () => { drawing = false; _updateSigDoneBtn({ triggerAttention: true }); });
 
   sigModalPad = { canvas: fresh, ctx, cssW, cssH };
+
+  // Wire name input → re-evaluate Done button on every keystroke
+  const nameInput = document.getElementById('sigModalNameInput');
+  nameInput.removeEventListener('input', _updateSigDoneBtn);
+  nameInput.addEventListener('input', () => {
+    _setFieldAttention('sigModalNameInput', false);
+    _updateSigDoneBtn({ triggerAttention: false });
+  });
+
+  // Wire unit input → re-evaluate Done button on every keystroke (RMA only)
+  unitInput.removeEventListener('input', _updateSigDoneBtn);
+  unitInput.addEventListener('input', () => {
+    _setFieldAttention('sigModalUnitInput', false);
+    _updateSigDoneBtn({ triggerAttention: false });
+  });
+
+  // Set initial Done button state — triggerAttention=true handles rotate-back
+  // to portrait when a drawing exists but name/unit are still empty
+  _updateSigDoneBtn({ triggerAttention: true });
 }
 
 
@@ -2298,6 +2342,46 @@ function sigModalClear() {
   // Redraw watermark so the label reappears after clearing
   const cfg = SIG_CONFIGS[sigModalIdx];
   _drawModalWatermark(ctx, cssW, cssH, cfg.watermark);
+  _setFieldAttention('sigModalNameInput', false);
+  _setFieldAttention('sigModalUnitInput', false);
+  _updateSigDoneBtn();
+}
+
+function _updateSigDoneBtn({ triggerAttention = false } = {}) {
+  const btn = document.querySelector('.sig-modal-done');
+  if (!btn) return;
+
+  // Option B: Done is never available in landscape — must rotate to portrait
+  const isLandscape = window.matchMedia('(orientation: landscape) and (max-width: 900px)').matches;
+  if (isLandscape) { btn.disabled = true; return; }
+
+  const cfg = SIG_CONFIGS[sigModalIdx];
+  const hasDrawing = sigModalPad && sigModalPad.canvas.dataset.hasDrawing === 'true';
+  const hasName    = (document.getElementById('sigModalNameInput')?.value || '').trim().length > 0;
+  const hasUnit    = !cfg.unitField || (document.getElementById('sigModalUnitInput')?.value || '').trim().length > 0;
+
+  btn.disabled = !(hasDrawing && hasName && hasUnit);
+
+  // Apply "needs attention" highlight to empty text fields after signature is drawn
+  if (hasDrawing && triggerAttention) {
+    _setFieldAttention('sigModalNameInput', !hasName);
+    if (cfg.unitField) _setFieldAttention('sigModalUnitInput', !hasUnit);
+  }
+}
+
+function _setFieldAttention(inputId, needsIt) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const wrap = input.closest('.sig-modal-name');
+  if (!wrap) return;
+  if (needsIt) {
+    // Re-trigger animation by removing and re-adding the class
+    wrap.classList.remove('needs-attention');
+    void wrap.offsetWidth; // force reflow
+    wrap.classList.add('needs-attention');
+  } else {
+    wrap.classList.remove('needs-attention');
+  }
 }
 
 // Commits only the canvas drawing (not name/unit inputs).
@@ -3250,7 +3334,7 @@ async function generatePDF() {
       </div>
       <div class="sig-modal-actions">
         <button class="sig-clear-btn" onclick="sigModalClear()">Clear</button>
-        <button class="sig-modal-done" onclick="closeSigModal()">Done</button>
+        <button class="sig-modal-done" disabled onclick="closeSigModal()">Done</button>
       </div>
     </div>
   </div>
@@ -3265,7 +3349,7 @@ async function generatePDF() {
       <input type="text" id="sigModalUnitInput" placeholder="Unit number" autocomplete="off">
     </div>
     <div class="sig-rotate-hint">↻ &nbsp;Rotate to landscape for a wider signing area</div>
-    <div class="sig-landscape-hint">↺ &nbsp;Rotate to portrait to fill in name fields</div>
+    <div class="sig-landscape-hint">↺ &nbsp;Rotate to portrait to complete signing</div>
   </div>
 </div>
 

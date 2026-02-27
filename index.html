@@ -2153,6 +2153,7 @@ function _onSigModalResize() {
   clearTimeout(_sigResizeTimer);
   _sigResizeTimer = setTimeout(() => {
     if (document.getElementById('sigModal').classList.contains('active')) {
+      _commitSigModalCanvasOnly(); // preserve any drawing before rebuild
       _buildSigModal();
     }
   }, 120);
@@ -2240,6 +2241,7 @@ function _buildSigModal() {
   fresh.width  = canvas.width;
   fresh.height = canvas.height;
   fresh.dataset.sigId = cfg.id;
+  fresh.dataset.hasDrawing = 'false'; // always reset — cloneNode copies old attribute
   canvas.parentElement.replaceChild(fresh, canvas);
 
   const ctx = fresh.getContext('2d');

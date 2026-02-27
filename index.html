@@ -10214,6 +10214,16 @@ function _buildSigModal() {
   document.getElementById('sigModalNameLabel').textContent = cfg.nameLabel;
   document.getElementById('sigModalNameInput').value = document.getElementById(cfg.nameField)?.value || '';
 
+  const unitRow = document.getElementById('sigModalUnitRow');
+  const unitInput = document.getElementById('sigModalUnitInput');
+  if (cfg.unitField) {
+    unitRow.style.display = '';
+    unitInput.value = document.getElementById(cfg.unitField)?.value || '';
+  } else {
+    unitRow.style.display = 'none';
+    unitInput.value = '';
+  }
+
   // Only carry forward in-progress drawing on same sig (e.g. orientation resize).
   // Never carry forward a watermark-only canvas — that would bake it into the committed sig.
   const currentCanvas = document.getElementById('sigModalCanvas');
@@ -10317,6 +10327,13 @@ function _commitSigModal() {
   const nameVal = document.getElementById('sigModalNameInput').value;
   const nameField = document.getElementById(cfg.nameField);
   if (nameField) nameField.value = nameVal;
+
+  // Save unit # back to form (RMA only)
+  if (cfg.unitField) {
+    const unitVal = document.getElementById('sigModalUnitInput').value;
+    const unitField = document.getElementById(cfg.unitField);
+    if (unitField) unitField.value = unitVal;
+  }
 
   // Copy modal canvas → inline preview canvas
   const modalCanvas = sigModalPad.canvas;
@@ -12137,6 +12154,10 @@ function loadScript(src) {
     <div class="sig-modal-name">
       <label id="sigModalNameLabel">Printed Name</label>
       <input type="text" id="sigModalNameInput" placeholder="Printed name" autocomplete="off">
+    </div>
+    <div class="sig-modal-name" id="sigModalUnitRow" style="display:none">
+      <label>Unit #</label>
+      <input type="text" id="sigModalUnitInput" placeholder="Unit number" autocomplete="off">
     </div>
     <div class="sig-rotate-hint">↻ &nbsp;Rotate to landscape for a wider signing area</div>
   </div>

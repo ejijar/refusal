@@ -994,6 +994,67 @@
     text-align: right;
   }
 
+  /* ── Custom Confirm Modal ── */
+  #confirmModalBackdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 999990;
+  }
+  #confirmModalBackdrop.active { display: block; }
+  #confirmModal {
+    display: none;
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    z-index: 999991;
+    width: min(320px, 90vw);
+    padding: 24px 20px 20px;
+    flex-direction: column;
+    gap: 20px;
+  }
+  #confirmModal.active { display: flex; }
+  .confirm-modal-msg {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+    text-align: center;
+  }
+  .confirm-modal-btns {
+    display: flex;
+    gap: 10px;
+  }
+  .confirm-modal-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: var(--radius);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid var(--border);
+  }
+  .confirm-modal-btn.yes {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+  }
+  .confirm-modal-btn.yes:hover { background: var(--accent2); border-color: var(--accent2); }
+  .confirm-modal-btn.no {
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .confirm-modal-btn.no:hover { border-color: var(--accent); color: var(--accent); }
+
   #autoSaveIndicator { display: none; }
 
   .hamburger-save-status {
@@ -1158,7 +1219,7 @@
       </div>
     </div>
     <div class="hamburger-menu-divider"></div>
-    <div class="hamburger-menu-version">v3.3</div>
+    <div class="hamburger-menu-version">v3.4</div>
   </div>
   <!-- Hidden file input for loading encrypted saves -->
   <input type="file" id="loadFileInput" accept=".ncems" style="display:none" onchange="handleLoadFile(this)">
@@ -2353,6 +2414,27 @@ function _clearAutoSave() {
 }
 
 // ── New Form ──────────────────────────────────────────────────────────────────
+function showConfirm(msg) {
+  return new Promise(resolve => {
+    document.getElementById('confirmModalMsg').textContent = msg;
+    document.getElementById('confirmModalBackdrop').classList.add('active');
+    document.getElementById('confirmModal').classList.add('active');
+    const yes = document.getElementById('confirmModalYes');
+    const no  = document.getElementById('confirmModalNo');
+    function close(result) {
+      document.getElementById('confirmModalBackdrop').classList.remove('active');
+      document.getElementById('confirmModal').classList.remove('active');
+      yes.removeEventListener('click', onYes);
+      no.removeEventListener('click', onNo);
+      resolve(result);
+    }
+    function onYes() { close(true); }
+    function onNo()  { close(false); }
+    yes.addEventListener('click', onYes);
+    no.addEventListener('click', onNo);
+  });
+}
+
 async function newForm() {
   const data = _collectFormData();
   const hasContent = Object.values(data.texts).some(v => v && v.trim()) ||
@@ -2361,7 +2443,7 @@ async function newForm() {
                      Object.values(data.sigs).some(v => v);
 
   if (hasContent) {
-    const save = confirm('Save a copy of the current form before starting a new one?');
+    const save = await showConfirm('Save a copy of the current form before starting a new one?');
     if (save) {
       await _doAutoSave();
       await _exportAutoSaveAsFile();
@@ -2964,6 +3046,16 @@ async function generatePDF() {
       <input type="text" id="sigModalNameInput" placeholder="Printed name" autocomplete="off">
     </div>
     <div class="sig-rotate-hint">↻ &nbsp;Rotate to landscape for a wider signing area</div>
+  </div>
+</div>
+
+<!-- ── Custom Confirm Modal ── -->
+<div id="confirmModalBackdrop"></div>
+<div id="confirmModal">
+  <div class="confirm-modal-msg" id="confirmModalMsg"></div>
+  <div class="confirm-modal-btns">
+    <button class="confirm-modal-btn no"  id="confirmModalNo">No</button>
+    <button class="confirm-modal-btn yes" id="confirmModalYes">Yes</button>
   </div>
 </div>
 

@@ -1996,9 +1996,11 @@ function _updateSigUI(cfg) {
   const preview = document.getElementById(`preview${cfg.id.replace('sig','')}`);
   const btn = document.getElementById(cfg.btnId);
   const emptySpan = preview?.querySelector('.sig-preview-empty');
+  const watermarkSpan = preview?.querySelector('.sig-watermark');
   const isEmpty = isCanvasEmpty(cfg.id);
   
   if (emptySpan) emptySpan.style.display = isEmpty ? '' : 'none';
+  if (watermarkSpan) watermarkSpan.style.display = isEmpty ? '' : 'none';
   if (btn) {
     btn.textContent = isEmpty ? '✍ Sign' : '✎ Edit Signature';
     btn.classList.toggle('has-sig', !isEmpty);

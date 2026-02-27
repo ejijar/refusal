@@ -994,16 +994,31 @@
     text-align: right;
   }
 
-  /* ── Auto-save indicator ── */
-  #autoSaveIndicator {
+  #autoSaveIndicator { display: none; }
+
+  .hamburger-save-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 16px;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    color: transparent;
-    letter-spacing: 0.04em;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.03em;
     transition: color 0.3s;
-    white-space: nowrap;
   }
-  #autoSaveIndicator.saved { color: var(--success); }
+  .hamburger-save-status svg {
+    flex-shrink: 0;
+    opacity: 0.5;
+    transition: opacity 0.3s;
+  }
+  .hamburger-save-status.saved {
+    color: var(--success);
+  }
+  .hamburger-save-status.saved svg {
+    opacity: 1;
+    stroke: var(--success);
+  }
 
   /* The header needs relative positioning to anchor the dropdown */
   .app-header { position: relative; }
@@ -1104,7 +1119,7 @@
     <div class="subtitle">New Canaan Emergency Medical Services</div>
   </div>
   </div>
-  <span id="autoSaveIndicator"></span>
+  <span id="autoSaveIndicator" style="display:none"></span>
   <button class="hamburger-btn" onclick="toggleHamburgerMenu(event)" id="hamburgerBtn" aria-label="Menu">
     <span></span>
     <span></span>
@@ -1112,7 +1127,11 @@
   </button>
   <!-- Hamburger Dropdown Menu -->
   <div class="hamburger-menu" id="hamburgerMenu">
-    <div class="hamburger-menu-item" onclick="newForm(); closeHamburgerMenu()">
+    <div class="hamburger-save-status" id="hamburgerSaveStatus">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      <span id="hamburgerSaveText">No changes yet</span>
+    </div>
+    <div class="hamburger-menu-divider"></div>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
       New Form
     </div>
@@ -1138,7 +1157,7 @@
       </div>
     </div>
     <div class="hamburger-menu-divider"></div>
-    <div class="hamburger-menu-version">v3.2</div>
+    <div class="hamburger-menu-version">v3.3</div>
   </div>
   <!-- Hidden file input for loading encrypted saves -->
   <input type="file" id="loadFileInput" accept=".ncems" style="display:none" onchange="handleLoadFile(this)">
@@ -2289,12 +2308,18 @@ async function _doAutoSave() {
 }
 
 function _showAutoSaveIndicator() {
-  const el = document.getElementById('autoSaveIndicator');
-  if (!el) return;
-  el.classList.add('saved');
-  el.textContent = '✓ Saved';
-  clearTimeout(el._hideTimer);
-  el._hideTimer = setTimeout(() => { el.classList.remove('saved'); el.textContent = ''; }, 2000);
+  const status = document.getElementById('hamburgerSaveStatus');
+  const text   = document.getElementById('hamburgerSaveText');
+  if (!status || !text) return;
+
+  const now = new Date();
+  const h   = now.getHours();
+  const m   = String(now.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  text.textContent = 'Saved at ' + h12 + ':' + m + ' ' + ampm;
+
+  status.classList.add('saved');
 }
 
 function scheduleAutoSave() {
